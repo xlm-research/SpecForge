@@ -219,7 +219,8 @@ class OnlineEagle3Model(Eagle3Model):
 
             # Step 5.4: get logits
             logits = self.draft_model.compute_logits(hidden_states)
-            logits = gather_outputs_and_unpad(logits, gather_dim=1)
+            if self.attention_backend == "usp":
+                logits = gather_outputs_and_unpad(logits, gather_dim=1)
             # Step 5.5: record metrics first as we in-place modify logits
             with torch.no_grad():
                 acces.append(

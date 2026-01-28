@@ -20,6 +20,7 @@ from sglang.srt.managers.schedule_batch import (
     ScheduleBatch,
 )
 from sglang.srt.managers.scheduler import Scheduler
+from sglang.srt.managers.scheduler_dp_attn_mixin import prepare_mlp_sync_batch_raw
 from sglang.srt.mem_cache.cache_init_params import CacheInitParams
 from sglang.srt.mem_cache.radix_cache import RadixCache
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch
@@ -30,7 +31,7 @@ from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 from sglang.srt.utils import require_mlp_sync, require_mlp_tp_gather
 from transformers import AutoModelForCausalLM
 
-from specforge.distributed import get_tp_device_mesh, get_tp_group
+from specforge.distributed import get_dp_group, get_tp_device_mesh, get_tp_group
 from specforge.utils import padding
 
 from .sglang_backend import SGLangRunner, wrap_eagle3_logits_processors_in_module
@@ -302,9 +303,11 @@ class SGLangEagle3TargetModel(Eagle3TargetModel):
         **kwargs,
     ) -> "SGLangEagle3TargetModel":
         tp_size = dist.get_world_size(get_tp_group())
+        dp_size = dist.get_world_size(get_dp_group())
         server_args = ServerArgs(
             model_path=pretrained_model_name_or_path,
             trust_remote_code=trust_remote_code,
+            dp_size=dp_size,
             dtype=torch_dtype,
             enable_return_hidden_states=True,
             disable_cuda_graph=True,  # we use piecewise cuda graph for prefill instead
@@ -410,15 +413,15 @@ class SGLangEagle3TargetModel(Eagle3TargetModel):
 
     def _maybe_prepare_mlp_sync_batch(self, batch: ScheduleBatch):
         if require_mlp_sync(self.model_runner.server_args):
-            Scheduler.prepare_mlp_sync_batch_raw(
+            prepare_mlp_sync_batch_raw(
                 batch,
                 dp_size=self.model_runner.server_args.dp_size,
                 attn_tp_size=1,
                 tp_group=self.model_runner.tp_group,
                 get_idle_batch=None,
                 disable_cuda_graph=self.model_runner.server_args.disable_cuda_graph,
-                spec_algorithm=SpeculativeAlgorithm.NONE,
-                speculative_num_draft_tokens=None,
+                # spec_algorithm=SpeculativeAlgorithm.NONE,
+                # speculative_num_draft_tokens=None,
                 require_mlp_tp_gather=require_mlp_tp_gather(
                     self.model_runner.server_args
                 ),

@@ -338,7 +338,10 @@ def sanity_check(args: Namespace) -> None:
         None
     """
     args.dp_size = dist.get_world_size() // args.tp_size
-    args.target_batch_size = args.tp_size * args.batch_size
+    # Keep per-rank batch size for debug; avoids inflating to tp_size * batch_size
+    args.target_batch_size = args.batch_size
+    assert args.tp_size == args.batch_size * args.sp_ulysses_size * args.sp_ring_size, \
+        f"tp_size: {args.tp_size}, batch_size: {args.batch_size}, sp_ulysses_size: {args.sp_ulysses_size}, sp_ring_size: {args.sp_ring_size}"
     args.draft_accumulation_steps = (
         args.draft_accumulation_steps * args.sp_ulysses_size * args.sp_ring_size
     )
@@ -667,7 +670,8 @@ def get_dp_data_shard_from_tp(tensor: torch.Tensor, sp_dim: int = 1) -> torch.Te
     tp_group = get_tp_group()
     tp_size = dist.get_world_size(tp_group)
     tp_rank = dist.get_rank(tp_group)
-
+    if tensor.shape[0] < tp_size:
+        return tensor
     local_tp_shard = tensor.chunk(tp_size, dim=0)[tp_rank]
 
     # 2. SP: Handle dynamic sequence lengths and Gather

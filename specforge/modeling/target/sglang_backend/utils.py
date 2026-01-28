@@ -25,6 +25,9 @@ class ReplacedLogitsProcessorEagle3Output:
     logits: torch.Tensor
     aux_hidden_states: torch.Tensor
     last_hidden_states: Optional[torch.Tensor] = None
+    # Compatibility with sglang LogitsProcessorOutput
+    next_token_logits: Optional[torch.Tensor] = None
+    hidden_states: Optional[torch.Tensor] = None
 
 
 def replaced_logits_processor_forward_for_eagle3(
@@ -115,6 +118,8 @@ def replaced_logits_processor_forward_for_eagle3(
         logits=logits,
         aux_hidden_states=hidden_states_to_store,
         last_hidden_states=last_hidden_states,
+        next_token_logits=logits,
+        hidden_states=hidden_states_to_store,
     )
 
 

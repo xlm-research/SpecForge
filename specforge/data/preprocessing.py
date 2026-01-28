@@ -53,6 +53,31 @@ Conversation = List[Dict[str, str]]
 # ==============================
 
 
+def _normalize_conversation_messages(conversation: Conversation) -> Conversation:
+    if not conversation:
+        return conversation
+    normalized: Conversation = []
+    for message in conversation:
+        if not isinstance(message, dict):
+            normalized.append(message)
+            continue
+        new_message = dict(message)
+        role = new_message.get("role")
+        if role is None and "from" in new_message:
+            role = new_message.get("from")
+        if role in {"human", "user"}:
+            role = "user"
+        elif role in {"gpt", "assistant", "bot"}:
+            role = "assistant"
+        elif role in {"system", "system_prompt"}:
+            role = "system"
+        new_message["role"] = role
+        if "content" not in new_message and "value" in new_message:
+            new_message["content"] = new_message.get("value")
+        normalized.append(new_message)
+    return normalized
+
+
 def _apply_loss_mask_from_chat_template(
     text: str,
     offsets: torch.Tensor,
@@ -158,6 +183,8 @@ def preprocess_conversations(
         if not source:
             # if the source is None, skip it
             continue
+        if not is_preformatted:
+            source = _normalize_conversation_messages(source)
         input_ids, loss_mask = parser.parse(
             source,
             max_length,
@@ -210,6 +237,7 @@ def preprocess_vlm_conversations(
     # Note: currently, we assume that each example has only one image
     for i, image in enumerate(examples["image"]):
         source = examples["conversations"][i]
+        source = _normalize_conversation_messages(source)
         messages = [{"role": "system", "content": system_prompt}]
         if not source:
             # if the source is None, skip it
